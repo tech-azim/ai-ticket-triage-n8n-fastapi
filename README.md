@@ -20,7 +20,7 @@ An AI-powered support ticket triage system that automatically classifies ticket 
 ### Application Screenshots
 ![Dashboard](images/dashboard.png)
 ![Submit Ticket](images/submit-ticket.png)
-![Ticket Detail](images/ticket-detail.png)
+![Ticket Detail](images/page-detail.png)
 
 ## �🚀 Setup
 
