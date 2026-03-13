@@ -14,32 +14,36 @@ An AI-powered support ticket triage system that automatically classifies ticket 
 
 ## 🚀 Setup
 
+### 1. Clone Repository
 ```bash
-# Clone repo
 git clone <repo-url>
-cd ai-ticket-triage/backend
+cd ai-ticket-triage-n8n-fastapi
+```
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+### 2. Setup Environment Variables
+```bash
+# Copy environment template
+cp .env.example .env
 
-# Install dependencies
-pip install -r requirements.txt
+# Edit .env and add your GROQ_API_KEY
+# GROQ_API_KEY=your_groq_api_key_here
+```
 
-# Run FastAPI
-uvicorn app.main:app --reload --port 8000
+### 3. Run Docker Services
+```bash
+# Start MySQL and n8n containers
+docker-compose up -d
 
-Verify at: `http://localhost:8000/docs` ✅
+# Verify services are running
+docker ps
+```
 
----
-
-### 6. Setup n8n Workflow
-
+### 4. Setup n8n Workflow
 1. Open `http://localhost:5678`
 2. Create account and login
 3. Click **"+"** → New Workflow
 4. Click menu **⋮** → **Import from file**
-5. Upload `n8n/workflow.json`
+5. Upload `n8n/workflown8n.json`
 6. Set up Groq credential:
    - Go to **Settings → Credentials → New**
    - Select **"Header Auth"**
@@ -49,14 +53,31 @@ Verify at: `http://localhost:8000/docs` ✅
 7. In **"Call Groq API"** node and **"Generate Escalation Note"** node, set Authentication to your `Groq API` credential
 8. Toggle workflow **Inactive → Active**
 
----
-
-### 7. Setup Frontend (Next.js)
-
+### 5. Setup Backend (FastAPI)
 ```bash
-cd frontend
+cd backend
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+#Copy root env to backend
+cp .env backend/app/.env
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run FastAPI
+uvicorn app.main:app --reload --port 8000
+```
+
+Verify at: `http://localhost:8000/docs` ✅
+
+### 6. Setup Frontend (Next.js)
+```bash
+cd ../frontend
 pnpm install
-cp frontend/.env.example frontend/.env.example
+cp frontend/.env.example frontend/.env
 pnpm run dev
 ```
 
