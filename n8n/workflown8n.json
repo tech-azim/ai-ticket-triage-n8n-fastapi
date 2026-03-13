@@ -1,0 +1,338 @@
+{
+  "name": "AI Ticket Triage",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ticket-triage",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "36cca3eb-6816-43ef-a861-615a54fe2391",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        640
+      ],
+      "webhookId": "ticket-triage-webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"received\"}",
+        "options": {}
+      },
+      "id": "c8756365-cf5c-4083-a819-c283cd7c044e",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -752,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8000/tickets/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "7e68554d-fd65-48ef-9c43-174685bff489",
+      "name": "Fetch Recent Tickets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -496,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ambil SEMUA items dari input, bukan hanya first()\nconst allItems = $input.all();\n\nconst analyzed = allItems\n  .map(item => item.json)\n  .filter(t => t.status === 'analyzed' && t.urgency_level && t.urgency_level !== 'Unknown')\n  .slice(0, 10)\n  .map(t => ({\n    id: t.id,\n    title: t.title || '',\n    description: t.description ? t.description.substring(0, 200) : '',\n    urgency_level: t.urgency_level,\n    severity_score: t.severity_score\n  }));\n\n// Handle body wrapper dari n8n\nconst raw = $('Webhook').first().json;\nconst webhookData = raw.body ? raw.body : raw;\n\n// Format sebagai plain text bukan JSON string — hindari quote conflict\nconst summaryText = analyzed.length > 0\n  ? analyzed.map(t => `ID${t.id}: ${t.title} [${t.urgency_level} score:${t.severity_score}]`).join(' | ')\n  : 'No previous tickets found';\n\nreturn [{\n  json: {\n    ticket_id: webhookData.ticket_id,\n    title: webhookData.title,\n    description: webhookData.description,\n    recent_tickets: analyzed,\n    recent_tickets_summary: summaryText\n  }\n}];"
+      },
+      "id": "3c71f709-ab3b-491e-ae34-2cb76b1da95e",
+      "name": "Prepare Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -256,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.GROQ_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0.2,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert support ticket triage assistant with multilingual capability. Your job is to analyze support tickets and return structured analysis.\\n\\nYou MUST respond ONLY with a single valid JSON object. No markdown, no explanation, no code blocks.\\n\\nJSON format:\\n{\\n  \\\"detected_language\\\": \\\"<ISO 639-1 code: en/id/ms/zh/ja/etc>\\\",\\n  \\\"urgency_level\\\": \\\"<Low|Medium|High|Critical>\\\",\\n  \\\"severity_score\\\": <integer 1-100>,\\n  \\\"confidence_score\\\": <float 0.0-1.0, how confident you are in this analysis>,\\n  \\\"reasoning\\\": \\\"<brief explanation in same language as the ticket>\\\",\\n  \\\"similar_ticket_ids\\\": [<list of similar ticket IDs from context, empty array if none>]\\n}\\n\\nUrgency guidelines:\\n- Critical (80-100): System down, data loss, security breach, payment failure\\n- High (60-79): Major feature broken, affects many users, no workaround\\n- Medium (40-59): Feature degraded, workaround exists, affects some users\\n- Low (1-39): Minor issue, cosmetic, enhancement request\\n\\nConfidence score guidelines:\\n- 0.9-1.0: Very clear issue with obvious urgency\\n- 0.7-0.89: Clear issue, minor ambiguity\\n- 0.5-0.69: Somewhat ambiguous, limited context\\n- 0.0-0.49: Very ambiguous or insufficient information\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Analyze this support ticket:\\\\n\\\\nTitle: ' + $json.title + '\\\\nDescription: ' + $json.description + '\\\\n\\\\nRecent ticket history for similar ticket detection:\\\\n' + ($json.recent_tickets_summary || '[]') }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "6c3ab6eb-d72e-4e78-b6dc-042a7e81466f",
+      "name": "Call Groq API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst content = response.choices[0].message.content;\nconst cleaned = content.replace(/```json|```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    detected_language: 'unknown',\n    urgency_level: 'Unknown',\n    severity_score: 0,\n    confidence_score: 0.0,\n    reasoning: 'Failed to parse AI response: ' + content,\n    similar_ticket_ids: []\n  };\n}\n\nconst contextData = $('Prepare Context').first().json;\nconst ticket_id = contextData.ticket_id;\n\nconst urgency_level = ['Low','Medium','High','Critical'].includes(parsed.urgency_level)\n  ? parsed.urgency_level : 'Unknown';\nconst severity_score = Math.min(100, Math.max(0, parseInt(parsed.severity_score) || 0));\nconst confidence_score = Math.min(1.0, Math.max(0.0, parseFloat(parsed.confidence_score) || 0.0));\nconst detected_language = parsed.detected_language || 'unknown';\n\n// Filter similar IDs — harus integer valid & bukan ticket saat ini\nconst similar_ids = Array.isArray(parsed.similar_ticket_ids)\n  ? parsed.similar_ticket_ids\n      .map(id => parseInt(id))\n      .filter(id => !isNaN(id) && id !== parseInt(ticket_id))\n  : [];\n\nreturn [{\n  json: {\n    ticket_id,\n    urgency_level,\n    severity_score,\n    confidence_score,\n    detected_language,\n    reasoning: parsed.reasoning || 'No reasoning provided',\n    similar_ticket_ids: JSON.stringify(similar_ids),\n    is_critical: urgency_level === 'Critical'\n  }\n}];"
+      },
+      "id": "fd92c9ed-6fd0-40f9-a44a-0779e3321916",
+      "name": "Parse & Validate Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "critical-check",
+              "leftValue": "={{ $json.is_critical }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f52804dd-a4f5-4f70-85ac-4e590fcb68d0",
+      "name": "Is Critical?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        464,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.GROQ_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0.1,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an escalation specialist. Generate a brief, professional escalation summary for a CRITICAL support ticket. Respond in the same language as the ticket. Keep it under 3 sentences.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Critical ticket requires escalation:\\\\nTitle: ' + $('Prepare Context').first().json.title + '\\\\nReasoning: ' + $json.reasoning }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "ef065bfb-c0f9-4dea-aed1-41cf035ff43b",
+      "name": "Generate Escalation Note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        704,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge escalation note ke data\nconst analysisData = $('Is Critical?').first().json;\nconst escalationResponse = $input.first().json;\n\nlet escalation_note = '';\ntry {\n  escalation_note = escalationResponse.choices[0].message.content || '';\n} catch(e) {\n  escalation_note = 'Escalation note generation failed.';\n}\n\nreturn [{\n  json: {\n    ...analysisData,\n    reasoning: analysisData.reasoning + '\\n\\n[ESCALATION]: ' + escalation_note\n  }\n}];"
+      },
+      "id": "2013c207-ce6e-477c-8254-42a106b8f164",
+      "name": "Merge Escalation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'http://host.docker.internal:8000/tickets/' + $json.ticket_id + '/analysis' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"urgency_level\": \"{{ $json.urgency_level }}\",\n  \"severity_score\": {{ $json.severity_score }},\n  \"reasoning\": \"{{ $json.reasoning.replace(/\"/g, '\\\\\"').replace(/\\n/g, '\\\\n') }}\",\n  \"confidence_score\": {{ $json.confidence_score }},\n  \"detected_language\": \"{{ $json.detected_language }}\",\n  \"similar_ticket_ids\": \"{{ $json.similar_ticket_ids }}\"\n}",
+        "options": {}
+      },
+      "id": "fbe8df06-3237-45f1-bfa8-c517e0a5d5d8",
+      "name": "Callback FastAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1232,
+        704
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Recent Tickets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recent Tickets": {
+      "main": [
+        [
+          {
+            "node": "Prepare Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Context": {
+      "main": [
+        [
+          {
+            "node": "Call Groq API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Groq API": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Validate Response": {
+      "main": [
+        [
+          {
+            "node": "Is Critical?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Critical?": {
+      "main": [
+        [
+          {
+            "node": "Generate Escalation Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Callback FastAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Escalation Note": {
+      "main": [
+        [
+          {
+            "node": "Merge Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Escalation": {
+      "main": [
+        [
+          {
+            "node": "Callback FastAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "1848ec7d-05b5-4a1a-b70d-f9af43cfec5b",
+  "meta": {
+    "instanceId": "619c25404b60c5937b972add3a7241fdf29ffe3f00d5f1fb5553529d3a36f674"
+  },
+  "id": "x7sToBZcsFbFGJv1",
+  "tags": []
+}
