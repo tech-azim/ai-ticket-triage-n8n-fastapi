@@ -2,170 +2,32 @@
 
 An AI-powered support ticket triage system that automatically classifies ticket urgency using LLM, detects similar tickets, and supports multiple languages.
 
-![System Flow](https://via.placeholder.com/800x100/1a1a2e/white?text=User+Form+→+FastAPI+→+MySQL+→+n8n+→+Groq+LLM+→+Dashboard)
-
----
-
 ## 🏗️ Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
-| Backend API | FastAPI (Python) |
-| Database | MySQL 8.0 |
-| Workflow Automation | n8n (self-hosted via Docker) |
-| LLM Provider | Groq API (llama-3.3-70b-versatile) |
-| Frontend | Next.js (React) |
-| ORM | SQLAlchemy (async) |
-| Containerization | Docker Compose |
+- **Backend API:** FastAPI (Python)
+- **Database:** MySQL 8.0
+- **Workflow Automation:** n8n (Docker)
+- **LLM Provider:** Groq API
+- **Frontend:** Next.js (React)
+- **ORM:** SQLAlchemy (async)
+- **Containerization:** Docker Compose
 
----
-
-## ✨ Features
-
-- **Auto Triage** — AI classifies urgency: `Low`, `Medium`, `High`, `Critical`
-- **Severity Scoring** — Numeric score 1–100
-- **Confidence Scoring** — How confident the AI is in its analysis (0.0–1.0)
-- **Multi-language Support** — Auto-detects ticket language (EN, ID, etc.)
-- **Similar Ticket Detection** — Finds related tickets from history
-- **Auto Escalation** — Generates escalation note for Critical tickets
-- **Real-time Dashboard** — Live status updates via polling
-
----
-
-## 📁 Project Structure
-
-```
-ai-ticket-triage/
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── database.py
-│   │   ├── models/
-│   │   │   └── ticket.py
-│   │   ├── schemas/
-│   │   │   └── ticket.py
-│   │   ├── routes/
-│   │   │   └── tickets.py
-│   │   └── services/
-│   │       └── n8n_service.py
-│   ├── requirements.txt
-│   └── .env
-├── frontend/
-│   ├── app/
-│   │   ├── page.tsx           # Dashboard
-│   │   ├── submit/page.tsx    # Submit form
-│   │   └── tickets/[id]/page.tsx  # Ticket detail
-│   └── ...
-├── n8n/
-│   └── workflow.json          # n8n workflow export
-├── docker-compose.yml
-├── .env.example
-└── README.md
-```
-
----
-
-## 🚀 Setup & Installation
-
-### Prerequisites
-
-- Docker & Docker Compose
-- Python 3.8+
-- Node.js 18+
-- Groq API Key (free at [console.groq.com](https://console.groq.com))
-
----
-
-### 1. Clone Repository
+## 🚀 Setup
 
 ```bash
-git clone <repository-url>
-cd ai-ticket-triage
-```
+# Clone repo
+git clone <repo-url>
+cd ai-ticket-triage/backend
 
----
-
-### 2. Environment Variables
-
-Copy `.env.example` and fill in the values:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-
-```env
-# MySQL
-MYSQL_ROOT_PASSWORD=rootpassword
-MYSQL_DATABASE=ticket_db
-MYSQL_USER=ticket_user
-MYSQL_PASSWORD=ticket_pass
-
-# FastAPI
-DATABASE_URL=mysql+aiomysql://ticket_user:ticket_pass@localhost:3307/ticket_db
-N8N_WEBHOOK_URL=http://localhost:5678/webhook/ticket-triage
-
-# Groq
-GROQ_API_KEY=your_groq_api_key_here
-
-# n8n callback to FastAPI
-FASTAPI_CALLBACK_URL=http://host.docker.internal:8000/tickets
-```
-
----
-
-### 3. Start Infrastructure (MySQL + n8n)
-
-```bash
-docker compose up -d
-```
-
-Verify containers are running:
-
-```bash
-docker ps
-```
-
-Expected output:
-```
-ticket_mysql   Up   0.0.0.0:3307->3306/tcp
-ticket_n8n     Up   0.0.0.0:5678->5678/tcp
-```
-
----
-
-### 4. Setup MySQL User
-
-```bash
-docker exec -it ticket_mysql mysql -u root -p
-# Enter password: rootpassword
-```
-
-```sql
-CREATE USER 'ticket_user'@'%' IDENTIFIED BY 'ticket_pass';
-GRANT ALL PRIVILEGES ON ticket_db.* TO 'ticket_user'@'%';
-FLUSH PRIVILEGES;
-EXIT;
-```
-
----
-
-### 5. Setup Backend (FastAPI)
-
-```bash
-cd backend
+# Create virtual environment
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-pip install fastapi uvicorn sqlalchemy aiomysql pymysql greenlet httpx python-dotenv
-```
+# Install dependencies
+pip install -r requirements.txt
 
-Run the server:
-
-```bash
+# Run FastAPI
 uvicorn app.main:app --reload --port 8000
-```
 
 Verify at: `http://localhost:8000/docs` ✅
 
@@ -194,6 +56,7 @@ Verify at: `http://localhost:8000/docs` ✅
 ```bash
 cd frontend
 pnpm install
+cp frontend/.env.example frontend/.env.example
 pnpm run dev
 ```
 
@@ -347,7 +210,7 @@ ports:
 **DATABASE_URL not found**
 ```bash
 # Make sure .env is in backend/ directory
-cp .env backend/.env
+cp .env.example backend/app/.env
 ```
 
 ---
