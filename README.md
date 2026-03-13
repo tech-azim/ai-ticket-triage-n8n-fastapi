@@ -12,7 +12,17 @@ An AI-powered support ticket triage system that automatically classifies ticket 
 - **ORM:** SQLAlchemy (async)
 - **Containerization:** Docker Compose
 
-## 🚀 Setup
+## � Screenshots
+
+### n8n Workflow
+![n8n Workflow](images/n8n-workflow.png)
+
+### Application Screenshots
+![Dashboard](images/dashboard.png)
+![Submit Ticket](images/submit-ticket.png)
+![Ticket Detail](images/ticket-detail.png)
+
+## �🚀 Setup
 
 ### 1. Clone Repository
 ```bash
